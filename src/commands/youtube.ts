@@ -1,5 +1,4 @@
 // File: src/commands/youtube.ts
-
 import { SlashCommandBuilder } from '@discordjs/builders';
 import { exec } from 'child_process';
 import { AttachmentBuilder, ChatInputCommandInteraction } from 'discord.js';
@@ -111,35 +110,53 @@ export default class YoutubeDownloadCommand implements Command {
     quality?: string,
   ): Promise<DownloadResult> {
     const ytDlpQuality = quality || 'bestvideo+bestaudio/best';
-    const ytSearchQuery = `ytsearch:${query}`;
+    const ytSearchQuery = `ytsearch1:${query}`; // Limit to 1 result
 
     // Sanitize query for filename
     const safeQuery = query
       .replace(/[^a-zA-Z0-9_\-\.]/g, '_')
       .replace(/_{2,}/g, '_')
       .replace(/^_|_$/g, '')
-      .substring(0, 200); // Limit filename length
+      .substring(0, 200);
 
     const ytFilePath = path.join(outputDir, safeQuery);
     const outputTemplate = `${ytFilePath}.%(ext)s`;
 
     return new Promise((resolve, reject) => {
+      // First, get the video URL
       exec(
-        `yt-dlp -f ${ytDlpQuality} --get-url --merge-output-format mp4 -o "${outputTemplate}" "${ytSearchQuery}"`,
-        async (error, stdout, stderr) => {
-          if (error) {
-            console.error('Error downloading from YouTube:', stderr);
-            reject(new Error('Failed to download video.'));
-          } else {
-            const videoUrl = stdout.trim().split('\n')[0];
-            const mp4FilePath = `${ytFilePath}.mp4`;
-            resolve({ filePath: mp4FilePath, videoUrl });
+        `yt-dlp -f ${ytDlpQuality} --get-url "${ytSearchQuery}"`,
+        (urlError, urlStdout, urlStderr) => {
+          if (urlError) {
+            console.error('Error getting video URL:', urlStderr);
+            reject(new Error('Failed to get video URL.'));
+            return;
           }
-        },
+
+          const videoUrl = urlStdout.trim();
+
+          // Then, download the video
+          exec(
+            `yt-dlp -f ${ytDlpQuality} -o "${outputTemplate}" "${videoUrl}"`,
+            (downloadError, downloadStdout, downloadStderr) => {
+              if (downloadError) {
+                console.error('Error downloading video:', downloadStderr);
+                reject(new Error('Failed to download video.'));
+                return;
+              }
+
+              const mp4FilePath = `${ytFilePath}.mp4`;
+              if (fs.existsSync(mp4FilePath)) {
+                resolve({ filePath: mp4FilePath, videoUrl });
+              } else {
+                reject(new Error('Downloaded file not found.'));
+              }
+            }
+          );
+        }
       );
     });
   }
-
 
   private async compressVideo(
     filePath: string,
@@ -156,59 +173,30 @@ export default class YoutubeDownloadCommand implements Command {
           }
 
           const durationInSeconds = parseFloat(stdout);
-          const targetSize = targetSizeMB * 8 * 1024 * 1024; // Convert target size to bits
-          const bitrate = Math.floor(targetSize / durationInSeconds); // Calculate target bitrate
+          // const targetBitrate = Math.floor((targetSizeMB * 8 * 1024 * 1024) / durationInSeconds);
 
-          // For better quality, I now use a two-pass encoding process with adjusted CRF (Constant Rate Factor) and preset
-          const scale
-            = targetSizeMB > 25
-              ? 'iw/2:ih/2'
-              : targetSizeMB < 12
-                ? 'iw/4:ih/4'
-                : ''; // Adjust scale based on target size
-          const compressedFilePath = filePath.replace(
-            '.mp4',
-            '_compressed.mp4',
-          );
-          const crfValue = targetSizeMB > 25 ? '23' : '28'; // Lower CRF value for better quality, but higher file size
-          const preset = 'slow'; // Slower presets provide better compression
+          const scale = targetSizeMB > 25 ? 'iw/2:ih/2' : targetSizeMB < 12 ? 'iw/4:ih/4' : 'iw:ih';
+          const compressedFilePath = filePath.replace('.mp4', '_compressed.mp4');
+          const crfValue = targetSizeMB > 25 ? '23' : '28';
+          const preset = 'slow';
 
-          // First pass with CRF and preset settings
-          exec(
-            `ffmpeg -i "${filePath}" -b:v ${bitrate}k -pass 1 -c:v libx264 -preset ${preset} -crf ${crfValue} -an -vf "scale=${scale}" -f mp4 -y /dev/null`,
-            firstPassError => {
-              if (firstPassError) {
-                console.error(
-                  'Error during first pass of compression:',
-                  firstPassError,
-                );
-                reject(new Error('First pass compression failed.'));
-                return;
-              }
+          const ffmpegCommand = `ffmpeg -i "${filePath}" -c:v libx264 -preset ${preset} -crf ${crfValue} -c:a aac -b:a 128k -vf "scale=${scale}" -y "${compressedFilePath}"`;
 
-              // Second pass
-              exec(
-                `ffmpeg -i "${filePath}" -b:v ${bitrate}k -pass 2 -c:v libx264 -preset ${preset} -crf ${crfValue} -c:a aac -b:a 128k -vf "scale=${scale}" "${compressedFilePath}"`,
-                (secondPassError, compressStdout, compressStderr) => {
-                  if (secondPassError) {
-                    console.error(
-                      'Error during second pass of compression:',
-                      compressStderr,
-                    );
-                    reject(new Error('Second pass compression failed.'));
-                  } else {
-                    fs.unlinkSync(filePath); // Delete the original file
-                    fs.renameSync(compressedFilePath, filePath); // Rename compressed file to original file name
-                    resolve();
-                  }
-                },
-              );
-            },
-          );
-        },
+          exec(ffmpegCommand, (ffmpegError, ffmpegStdout, ffmpegStderr) => {
+            if (ffmpegError) {
+              console.error('Error compressing video:', ffmpegStderr);
+              reject(new Error('Video compression failed.'));
+            } else {
+              fs.unlinkSync(filePath);
+              fs.renameSync(compressedFilePath, filePath);
+              resolve();
+            }
+          });
+        }
       );
     });
   }
+
 
   private isFileSizeAcceptable(filePath: string, maxSizeMB: number): boolean {
     const stats = fs.statSync(filePath);
