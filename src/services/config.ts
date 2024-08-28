@@ -1,10 +1,10 @@
+import { ActivityType, PresenceStatusData } from 'discord.js';
 import dotenv from 'dotenv';
-import 'reflect-metadata';
-import {injectable} from 'inversify';
+import { injectable } from 'inversify';
 import path from 'path';
+import 'reflect-metadata';
+import { ConditionalKeys } from 'type-fest';
 import xbytes from 'xbytes';
-import {ConditionalKeys} from 'type-fest';
-import {ActivityType, PresenceStatusData} from 'discord.js';
 dotenv.config();
 
 export const DATA_DIR = path.resolve(process.env.DATA_DIR ? process.env.DATA_DIR : './data');
@@ -24,6 +24,8 @@ const CONFIG_MAP = {
   BOT_ACTIVITY: process.env.BOT_ACTIVITY ?? 'music',
   ENABLE_SPONSORBLOCK: process.env.ENABLE_SPONSORBLOCK === 'true',
   SPONSORBLOCK_TIMEOUT: process.env.ENABLE_SPONSORBLOCK ?? 5,
+  DOWNLOAD_URL: process.env.DOWNLOAD_URL ?? '',
+  DOWNLOAD_KEY: process.env.DOWNLOAD_KEY ?? '',
 } as const;
 
 const BOT_ACTIVITY_TYPE_MAP = {
