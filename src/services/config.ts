@@ -51,6 +51,8 @@ export default class Config {
   readonly BOT_ACTIVITY!: string;
   readonly ENABLE_SPONSORBLOCK!: boolean;
   readonly SPONSORBLOCK_TIMEOUT!: number;
+  readonly DOWNLOAD_URL!: string;
+  readonly DOWNLOAD_KEY!: string;
 
   constructor() {
     for (const [key, value] of Object.entries(CONFIG_MAP)) {

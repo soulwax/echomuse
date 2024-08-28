@@ -1,7 +1,9 @@
+// File: src/commands/download.ts
+
 import { SlashCommandBuilder } from '@discordjs/builders';
 import axios from 'axios';
 import { exec } from 'child_process';
-import { AttachmentBuilder, AutocompleteInteraction, ButtonInteraction, ChatInputCommandInteraction } from 'discord.js';
+import { AttachmentBuilder, ChatInputCommandInteraction } from 'discord.js';
 import fs from 'fs';
 import https from 'https';
 import { inject, injectable } from 'inversify';
@@ -10,15 +12,10 @@ import Config from '../services/config.js';
 import { TYPES } from '../types.js';
 import Command from './index.js';
 
-const outputDir = path.join('../../songs/');
+const outputDir = path.join('./songs/');
 
 @injectable()
 export default class DownloadCommand implements Command {
-  handledButtonIds?: readonly string[] | undefined;
-  requiresVC?: boolean | ((interaction: ChatInputCommandInteraction) => boolean) | undefined;
-  execute: (interaction: ChatInputCommandInteraction) => Promise<void>;
-  handleButtonInteraction?: ((interaction: ButtonInteraction) => Promise<void>) | undefined;
-  handleAutocompleteInteraction?: ((interaction: AutocompleteInteraction) => Promise<void>) | undefined;
   public readonly slashCommand = new SlashCommandBuilder()
     .setName('download')
     .setDescription('Download a song from a given query')
@@ -58,8 +55,10 @@ export default class DownloadCommand implements Command {
     await interaction.deferReply();
 
     try {
-      const filePath = await this.downloadFile(url);
-      const fileAttachment = new AttachmentBuilder(filePath);
+      const { filePath, filename } = await this.downloadFile(url, query);
+      const fileAttachment = new AttachmentBuilder(filePath, {
+        name: filename,
+      });
       await interaction.editReply({
         content: 'Download completed.',
         files: [fileAttachment],
@@ -67,7 +66,9 @@ export default class DownloadCommand implements Command {
       fs.unlinkSync(filePath); // Clean up the file after sending
     } catch (error) {
       console.error('Error occurred:', error);
-      await interaction.editReply('Failed to find results with the original backend, fallback to youtube...');
+      await interaction.editReply(
+        'Failed to find results with the original backend, fallback to youtube...',
+      );
 
       // Check if yt-dlp is installed before trying to use it
       this.checkYtDlpInstalled().then(async isInstalled => {
@@ -82,24 +83,27 @@ export default class DownloadCommand implements Command {
             fs.unlinkSync(ytFilePath); // Clean up the file after sending
           } catch (ytError) {
             console.error('YouTube download error:', ytError);
-            await interaction.editReply('Fallback to youtube, but... Error occurred while downloading from YouTube.');
+            await interaction.editReply(
+              'Fallback to youtube, but... Error occurred while downloading from YouTube.',
+            );
           }
         } else {
-          await interaction.editReply('yt-dlp is not installed. Unable to download from YouTube.');
+          await interaction.editReply(
+            'yt-dlp is not installed. Unable to download from YouTube.',
+          );
         }
       });
     }
   }
 
   private async downloadFromYouTube(query: string): Promise<string> {
-    // Construct the YouTube search query
     const ytSearchQuery = `ytsearch1:${query}`;
     const filename = `${query.replace(/ /g, '_')}.mp3`;
     const ytFilePath = path.join(outputDir, filename);
 
     return new Promise((resolve, reject) => {
       exec(
-        `yt-dlp -x --audio-format mp3 -o "${ytFilePath}" "${ytSearchQuery}"`,
+        `yt-dlp -x --audio-format mp3 -o "${ytFilePath}" "${ytSearchQuery}" --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"`,
         (error, stdout, stderr) => {
           if (error) {
             console.error('Error downloading from YouTube:', stderr);
@@ -121,7 +125,10 @@ export default class DownloadCommand implements Command {
     });
   }
 
-  private async downloadFile(url: string): Promise<string> {
+  private async downloadFile(
+    url: string,
+    query: string,
+  ): Promise<{ filePath: string; filename: string }> {
     const response = await axios({
       method: 'get',
       url,
@@ -131,13 +138,32 @@ export default class DownloadCommand implements Command {
       }),
     });
 
-    // Create folder outputDir if it doesn't exist
+    console.log('Response headers:');
+    console.log(response.headers);
+
     if (!fs.existsSync(outputDir)) {
       fs.mkdirSync(outputDir);
     }
 
-    const filename
-      = response.headers['content-disposition'].split('filename=')[1];
+    let filename = `${query.replace(/ /g, '_')}.mp3`;
+
+    const contentDisposition = response.headers['content-disposition'];
+    if (contentDisposition) {
+      const match = contentDisposition.match(
+        /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/,
+      );
+      if (match) {
+        filename = match[1].replace(/['"]/g, '');
+      }
+    }
+
+    // Filter out special characters and ensure .mp3 extension
+    filename = filename.replace(/[^a-zA-Z0-9_\-\.]/g, '')
+      .replace(/\.mp3+$/, '.mp3');
+    if (!filename.endsWith('.mp3')) {
+      filename += '.mp3';
+    }
+
     const filePath = path.join(outputDir, filename);
     const writer = fs.createWriteStream(filePath);
 
@@ -145,7 +171,10 @@ export default class DownloadCommand implements Command {
 
     return new Promise((resolve, reject) => {
       writer.on('finish', () => {
-        resolve(filePath);
+        resolve({
+          filePath,
+          filename,
+        });
       });
       writer.on('error', reject);
     });
