@@ -1,10 +1,10 @@
-import {ChatInputCommandInteraction} from 'discord.js';
-import {TYPES} from '../types.js';
-import {inject, injectable} from 'inversify';
+import { SlashCommandBuilder } from '@discordjs/builders';
+import { ChatInputCommandInteraction } from 'discord.js';
+import { inject, injectable } from 'inversify';
 import PlayerManager from '../managers/player.js';
+import { STATUS } from '../services/player.js';
+import { TYPES } from '../types.js';
 import Command from './index.js';
-import {SlashCommandBuilder} from '@discordjs/builders';
-import {STATUS} from '../services/player.js';
 
 @injectable()
 export default class implements Command {
@@ -23,12 +23,22 @@ export default class implements Command {
   public async execute(interaction: ChatInputCommandInteraction): Promise<void> {
     const player = this.playerManager.get(interaction.guild!.id);
 
+    // if (player.status === STATUS.IDLE) {
+    //   throw new Error('no songs to loop!');
+    // }
+
+    // if (player.queueSize() < 2) {
+    //   throw new Error('not enough songs to loop a queue!');
+    // }
+
     if (player.status === STATUS.IDLE) {
-      throw new Error('no songs to loop!');
+      await interaction.reply('no songs to loop!');
+      return;
     }
 
     if (player.queueSize() < 2) {
-      throw new Error('not enough songs to loop a queue!');
+      await interaction.reply('not enough songs to loop a queue!');
+      return;
     }
 
     if (player.loopCurrentSong) {

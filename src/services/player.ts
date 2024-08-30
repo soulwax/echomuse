@@ -1,10 +1,3 @@
-import {VoiceChannel, Snowflake} from 'discord.js';
-import {Readable} from 'stream';
-import hasha from 'hasha';
-import ytdl, {videoFormat} from '@distube/ytdl-core';
-import {WriteStream} from 'fs-capacitor';
-import ffmpeg from 'fluent-ffmpeg';
-import shuffle from 'array-shuffle';
 import {
   AudioPlayer,
   AudioPlayerState,
@@ -16,10 +9,17 @@ import {
   VoiceConnection,
   VoiceConnectionStatus,
 } from '@discordjs/voice';
-import FileCacheProvider from './file-cache.js';
+import ytdl, { videoFormat } from '@distube/ytdl-core';
+import shuffle from 'array-shuffle';
+import { Snowflake, VoiceChannel } from 'discord.js';
+import ffmpeg from 'fluent-ffmpeg';
+import { WriteStream } from 'fs-capacitor';
+import hasha from 'hasha';
+import { Readable } from 'stream';
+import { buildPlayingMessageEmbed } from '../utils/build-embed.js';
 import debug from '../utils/debug.js';
-import {getGuildSettings} from '../utils/get-guild-settings.js';
-import {buildPlayingMessageEmbed} from '../utils/build-embed.js';
+import { getGuildSettings } from '../utils/get-guild-settings.js';
+import FileCacheProvider from './file-cache.js';
 
 export enum MediaSource {
   Youtube,
@@ -57,7 +57,7 @@ export interface PlayerEvents {
   statusChange: (oldStatus: STATUS, newStatus: STATUS) => void;
 }
 
-type YTDLVideoFormat = videoFormat & {loudnessDb?: number};
+type YTDLVideoFormat = videoFormat & { loudnessDb?: number };
 
 export const DEFAULT_VOLUME = 100;
 
@@ -90,7 +90,7 @@ export default class {
   async connect(channel: VoiceChannel): Promise<void> {
     // Always get freshest default volume setting value
     const settings = await getGuildSettings(this.guildId);
-    const {defaultVolume = DEFAULT_VOLUME} = settings;
+    const { defaultVolume = DEFAULT_VOLUME } = settings;
     this.defaultVolume = defaultVolume;
 
     this.voiceConnection = joinVoiceChannel({
@@ -158,7 +158,7 @@ export default class {
       to = currentSong.length + currentSong.offset;
     }
 
-    const stream = await this.getStream(currentSong, {seek: realPositionSeconds, to});
+    const stream = await this.getStream(currentSong, { seek: realPositionSeconds, to });
     this.audioPlayer = createAudioPlayer({
       behaviors: {
         // Needs to be somewhat high for livestreams
@@ -221,7 +221,7 @@ export default class {
         to = currentSong.length + currentSong.offset;
       }
 
-      const stream = await this.getStream(currentSong, {seek: positionSeconds, to});
+      const stream = await this.getStream(currentSong, { seek: positionSeconds, to });
       this.audioPlayer = createAudioPlayer({
         behaviors: {
           // Needs to be somewhat high for livestreams
@@ -246,7 +246,7 @@ export default class {
     } catch (error: unknown) {
       await this.forward(1);
 
-      if ((error as {statusCode: number}).statusCode === 410 && currentSong) {
+      if ((error as { statusCode: number }).statusCode === 410 && currentSong) {
         const channelId = currentSong.addedInChannelId;
 
         if (channelId) {
@@ -285,7 +285,7 @@ export default class {
 
         const settings = await getGuildSettings(this.guildId);
 
-        const {secondsToWaitAfterQueueEmpties} = settings;
+        const { secondsToWaitAfterQueueEmpties } = settings;
         if (secondsToWaitAfterQueueEmpties !== 0) {
           this.disconnectTimer = setTimeout(() => {
             // Make sure we are not accidentally playing
@@ -312,7 +312,9 @@ export default class {
       this.positionInSeconds = 0;
       this.stopTrackingPosition();
     } else {
-      throw new Error('No songs in queue to forward to.');
+      // throw new Error('No songs in queue to forward to.');
+      // send a message to the channel that the queue has ended
+      this.currentChannel?.send('Queue has ended');
     }
   }
 
@@ -350,7 +352,7 @@ export default class {
     return this.queue.slice(this.queuePosition + 1);
   }
 
-  add(song: QueuedSong, {immediate = false} = {}): void {
+  add(song: QueuedSong, { immediate = false } = {}): void {
     if (song.playlist || !immediate) {
       // Add to end of queue
       this.queue.push(song);
@@ -428,7 +430,7 @@ export default class {
     return hasha(url);
   }
 
-  private async getStream(song: QueuedSong, options: {seek?: number; to?: number} = {}): Promise<Readable> {
+  private async getStream(song: QueuedSong, options: { seek?: number; to?: number } = {}): Promise<Readable> {
     if (this.status === STATUS.PLAYING) {
       this.audioPlayer?.stop();
     } else if (this.status === STATUS.PAUSED) {
@@ -436,7 +438,7 @@ export default class {
     }
 
     if (song.source === MediaSource.HLS) {
-      return this.createReadStream({url: song.url, cacheKey: song.url});
+      return this.createReadStream({ url: song.url, cacheKey: song.url });
     }
 
     let ffmpegInput: string | null;
@@ -459,7 +461,7 @@ export default class {
 
       const nextBestFormat = (formats: ytdl.videoFormat[]): ytdl.videoFormat | undefined => {
         if (formats[0].isLive) {
-          formats = formats.sort((a, b) => (b as unknown as {audioBitrate: number}).audioBitrate - (a as unknown as {audioBitrate: number}).audioBitrate); // Bad typings
+          formats = formats.sort((a, b) => (b as unknown as { audioBitrate: number }).audioBitrate - (a as unknown as { audioBitrate: number }).audioBitrate); // Bad typings
 
           return formats.find(format => [128, 127, 120, 96, 95, 94, 93].includes(parseInt(format.itag as unknown as string, 10))); // Bad typings
         }
@@ -586,7 +588,7 @@ export default class {
       await this.forward(1);
       // Auto announce the next song if configured to
       const settings = await getGuildSettings(this.guildId);
-      const {autoAnnounceNextSong} = settings;
+      const { autoAnnounceNextSong } = settings;
       if (autoAnnounceNextSong && this.currentChannel) {
         await this.currentChannel.send({
           embeds: this.getCurrent() ? [buildPlayingMessageEmbed(this)] : [],
@@ -595,7 +597,7 @@ export default class {
     }
   }
 
-  private async createReadStream(options: {url: string; cacheKey: string; ffmpegInputOptions?: string[]; cache?: boolean; volumeAdjustment?: string}): Promise<Readable> {
+  private async createReadStream(options: { url: string; cacheKey: string; ffmpegInputOptions?: string[]; cache?: boolean; volumeAdjustment?: string }): Promise<Readable> {
     return new Promise((resolve, reject) => {
       const capacitor = new WriteStream();
 
