@@ -9,7 +9,7 @@
   "types": "dts/types",
   "type": "module",
   "engines": {
-    "node": ">=20.17.0"
+    "node": ">=18.17.0"
   },
   "files": [
     "src"
@@ -20,7 +20,7 @@
     "typecheck": "tsc --noEmit",
     "test": "npm run lint",
     "start": "npm run env:set-database-url -- tsx src/scripts/migrate-and-start.ts",
-    "start:pm2": "pm2 start ecosystem.config.cjs",
+    "start:pm2": "pm2 start --name echoblossom npm --node-args='--inspect=9230' -- start",
     "cache:clear-key-value": "npm run env:set-database-url tsx src/scripts/cache-clear-key-value.ts",
     "dev": "npm run env:set-database-url -- tsx watch src/scripts/start.ts",
     "migrations:generate": "npm run prisma:with-env migrate dev",
