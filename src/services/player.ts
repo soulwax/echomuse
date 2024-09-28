@@ -549,7 +549,7 @@ export default class {
       return;
     }
 
-    if (this.voiceConnection.listeners(VoiceConnectionStatus.Disconnected).length === 0) {
+    if (this.voiceConnection?.state.status !== VoiceConnectionStatus.Disconnected) {
       this.voiceConnection.on(VoiceConnectionStatus.Disconnected, this.onVoiceConnectionDisconnect.bind(this));
     }
 
@@ -557,16 +557,19 @@ export default class {
       return;
     }
 
-    if (this.audioPlayer.listeners('stateChange').length === 0) {
-      this.audioPlayer.on(AudioPlayerStatus.Idle, this.onAudioPlayerIdle.bind(this));
+    if (this.audioPlayer.listenerCount('idle') === 0) {
+      this.audioPlayer.on('idle', this.onAudioPlayerIdle.bind(this));
     }
   }
 
+
   private onVoiceConnectionDisconnect(): void {
-    this.disconnect();
+    if (this.voiceConnection) {
+      this.disconnect();
+    }
   }
 
-  private async onAudioPlayerIdle(_oldState: AudioPlayerState, newState: AudioPlayerState): Promise<void> {
+  private async onAudioPlayerIdle(_oldState: AudioPlayerState, newState: AudioPlayerState & { status: AudioPlayerStatus.Idle }): Promise<void> {
     // Automatically advance queued song at end
     if (this.loopCurrentSong && newState.status === AudioPlayerStatus.Idle && this.status === STATUS.PLAYING) {
       await this.seek(0);
@@ -603,7 +606,7 @@ export default class {
 
       if (options?.cache) {
         const cacheStream = this.fileCache.createWriteStream(this.getHashForCache(options.cacheKey));
-        capacitor.createReadStream().pipe(cacheStream);
+        capacitor.createReadStream().pipe(cacheStream as WritableStream | unknown as NodeJS.WritableStream);
       }
 
       const returnedStream = capacitor.createReadStream();
