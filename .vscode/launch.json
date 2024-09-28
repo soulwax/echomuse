@@ -5,12 +5,11 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "attachSimplePort": 9229,
-      "name": "Launch Program",
-      "type": "node",
-      "request": "launch",
-      "program": "${workspaceFolder}/src/scripts/migrate-and-start.ts",
-      "skipFiles": ["<node_internals>/**"]
+      "name": "Attach to Process",
+      "port": 9230,
+      "request": "attach",
+      "skipFiles": ["<node_internals>/**"],
+      "type": "node"
     }
   ]
 }
