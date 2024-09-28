@@ -8,7 +8,7 @@ module.exports = {
         NODE_ENV: 'production',
       },
       watch: false,
-      interpreter: 'node@20.17.0', // Specify the Node.js version
+      interpreter: 'node@20.17.0', // Update this to match your Node version
       autorestart: true,
     },
   ],
