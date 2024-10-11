@@ -20,7 +20,7 @@
     "typecheck": "tsc --noEmit",
     "test": "npm run lint",
     "start": "npm run env:set-database-url -- node dist/scripts/migrate-and-start.js",
-    "start:ts": "npm run env:set-database-url -- tsx src/scripts/migrate-and-start.ts",
+    "start:dev": "npm run env:set-database-url -- tsx src/scripts/migrate-and-start.ts",
     "start:pm2": "pm2 start --name echoblossom npm --node-args='--inspect=9230' -- start",
     "start:pm2:dev": "pm2 start --name echoblossom-dev npm -- run dev",
     "cache:clear-key-value": "npm run env:set-database-url tsx src/scripts/cache-clear-key-value.ts",

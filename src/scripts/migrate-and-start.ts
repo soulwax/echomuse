@@ -14,12 +14,6 @@ import { DATA_DIR } from '../services/config.js';
 import createDatabaseUrl, { createDatabasePath } from '../utils/create-database-url.js';
 import logBanner from '../utils/log-banner.js';
 
-import os from 'os';
-
-console.log('Current working directory:', process.cwd());
-console.log('Current user:', os.userInfo().username);
-console.log('Node.js version:', process.version);
-
 (async () => {
   logBanner();
   await startBot();
