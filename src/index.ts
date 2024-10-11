@@ -8,11 +8,6 @@ import Config from './services/config.js';
 import FileCacheProvider from './services/file-cache.js';
 import { TYPES } from './types.js';
 
-
-console.log('Current working directory:', process.cwd());
-console.log('Current user:', require('os').userInfo().username);
-console.log('Node.js version:', process.version);
-
 const bot = container.get<Bot>(TYPES.Bot);
 
 const startBot = async () => {
