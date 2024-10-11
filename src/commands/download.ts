@@ -46,6 +46,9 @@ export default class DownloadCommand implements Command {
   }
 
   async execute(interaction: ChatInputCommandInteraction) {
+    console.log('Current working directory:', process.cwd());
+    console.log('Current user:', require('os').userInfo().username);
+    console.log('Node.js version:', process.version);
     const query = interaction.options.getString('query')!;
     const offset = interaction.options.getInteger('offset') ?? 0;
     const songQuery = query.replace(/ /g, '+');

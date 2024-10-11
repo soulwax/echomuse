@@ -1,12 +1,11 @@
-// File: src/commands/youtube.ts
 import { SlashCommandBuilder } from '@discordjs/builders';
+import ytsr from '@distube/ytsr';
 import { exec } from 'child_process';
 import { AttachmentBuilder, ChatInputCommandInteraction } from 'discord.js';
 import fs from 'fs';
 import { inject, injectable } from 'inversify';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import ytsr from 'ytsr';
 import Config from '../services/config.js';
 import { DownloadResult, TYPES } from '../types.js';
 import Command from './index.js';
@@ -92,7 +91,7 @@ export default class YoutubeDownloadCommand implements Command {
       console.error(error);
       const videoUrl = await this.getFallbackYoutubeLink(query);
       await interaction.editReply({
-        content: `Server probably not fit fore meaningful compression sizes. Here's a direct link instead: ${videoUrl}`,
+        content: `Server probably not fit for meaningful compression sizes. Here's a direct link instead: ${videoUrl}`,
       });
     }
   }
@@ -173,7 +172,6 @@ export default class YoutubeDownloadCommand implements Command {
           }
 
           const durationInSeconds = parseFloat(stdout);
-          // const targetBitrate = Math.floor((targetSizeMB * 8 * 1024 * 1024) / durationInSeconds);
 
           const scale = targetSizeMB > 25 ? 'iw/2:ih/2' : targetSizeMB < 12 ? 'iw/4:ih/4' : 'iw:ih';
           const compressedFilePath = filePath.replace('.mp4', '_compressed.mp4');
@@ -197,7 +195,6 @@ export default class YoutubeDownloadCommand implements Command {
     });
   }
 
-
   private isFileSizeAcceptable(filePath: string, maxSizeMB: number): boolean {
     const stats = fs.statSync(filePath);
     const fileSizeInBytes = stats.size;
@@ -219,11 +216,13 @@ export default class YoutubeDownloadCommand implements Command {
     query: string,
   ): Promise<string> {
     const searchResults = await ytsr(query, { limit: 1 });
-    const firstResult = searchResults.items.find(item => item.type === 'video');
-    if (!firstResult || !('id' in firstResult)) {
+    if (!searchResults || !Array.isArray(searchResults.items) || searchResults.items.length === 0) {
       throw new Error('No video found.');
     }
-
+    const firstResult = searchResults.items[0];
+    if (firstResult.type !== 'video' || !firstResult.id) {
+      throw new Error('No video found.');
+    }
     return firstResult.id;
   }
 }

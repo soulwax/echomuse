@@ -5,14 +5,25 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-import {execa, ExecaError} from 'execa';
-import {promises as fs} from 'fs';
 import Prisma from '@prisma/client';
+import { execa, ExecaError } from 'execa';
+import { promises as fs } from 'fs';
 import ora from 'ora';
-import {startBot} from '../index.js';
+import { startBot } from '../index.js';
+import { DATA_DIR } from '../services/config.js';
+import createDatabaseUrl, { createDatabasePath } from '../utils/create-database-url.js';
 import logBanner from '../utils/log-banner.js';
-import createDatabaseUrl, {createDatabasePath} from '../utils/create-database-url.js';
-import {DATA_DIR} from '../services/config.js';
+
+import os from 'os';
+
+console.log('Current working directory:', process.cwd());
+console.log('Current user:', os.userInfo().username);
+console.log('Node.js version:', process.version);
+
+(async () => {
+  logBanner();
+  await startBot();
+})();
 
 const client = new Prisma.PrismaClient();
 

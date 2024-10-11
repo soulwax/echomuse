@@ -18,6 +18,7 @@ import ffmpeg from 'fluent-ffmpeg';
 import { WriteStream } from 'fs-capacitor';
 import hasha from 'hasha';
 import { Readable } from 'stream';
+import { WritableStream } from 'stream/web';
 import { buildPlayingMessageEmbed } from '../utils/build-embed.js';
 import debug from '../utils/debug.js';
 import { getGuildSettings } from '../utils/get-guild-settings.js';
@@ -560,7 +561,7 @@ export default class {
     }
 
     if (this.audioPlayer.listenerCount('idle') === 0) {
-      this.audioPlayer.on('idle', this.onAudioPlayerIdle.bind(this));
+      this.audioPlayer.on(AudioPlayerStatus.Idle, this.onAudioPlayerIdle.bind(this));
     }
   }
 

@@ -1,17 +1,20 @@
 // File: src/services/youtube-api.ts
 
-import {inject, injectable} from 'inversify';
-import {toSeconds, parse} from 'iso8601-duration';
-import got, {Got} from 'got';
-import ytsr, {Video} from '@distube/ytsr';
+import ytsr from '@distube/ytsr';
+import getYouTubeID from 'get-youtube-id';
+import got, { Got } from 'got';
+import { inject, injectable } from 'inversify';
+import { parse, toSeconds } from 'iso8601-duration';
 import PQueue from 'p-queue';
-import {SongMetadata, QueuedPlaylist, MediaSource} from './player.js';
-import {TYPES} from '../types.js';
+import { TYPES } from '../types.js';
+import { ONE_HOUR_IN_SECONDS, ONE_MINUTE_IN_SECONDS } from '../utils/constants.js';
+import { parseTime } from '../utils/time.js';
 import Config from './config.js';
 import KeyValueCacheProvider from './key-value-cache.js';
-import {ONE_HOUR_IN_SECONDS, ONE_MINUTE_IN_SECONDS} from '../utils/constants.js';
-import {parseTime} from '../utils/time.js';
-import getYouTubeID from 'get-youtube-id';
+import { MediaSource, QueuedPlaylist, SongMetadata } from './player.js';
+
+
+
 
 interface VideoDetailsResponse {
   id: string;
@@ -64,7 +67,7 @@ export default class {
   constructor(@inject(TYPES.Config) config: Config, @inject(TYPES.KeyValueCache) cache: KeyValueCacheProvider) {
     this.youtubeKey = config.YOUTUBE_API_KEY;
     this.cache = cache;
-    this.ytsrQueue = new PQueue({concurrency: 4});
+    this.ytsrQueue = new PQueue({ concurrency: 4 });
 
     this.got = got.extend({
       prefixUrl: 'https://www.googleapis.com/youtube/v3/',
@@ -76,7 +79,7 @@ export default class {
   }
 
   async search(query: string, shouldSplitChapters: boolean): Promise<SongMetadata[]> {
-    const {items} = await this.ytsrQueue.add(async () => this.cache.wrap(
+    const result = await this.ytsrQueue.add(async () => this.cache.wrap(
       ytsr,
       query,
       {
@@ -85,22 +88,25 @@ export default class {
       {
         expiresIn: ONE_HOUR_IN_SECONDS,
       },
-    ));
+    )) as VideoDetailsResponse | void; // Assuming VideoDetailsResponse is the correct type
 
-    let firstVideo: Video | undefined;
-
-    for (const item of items) {
-      if (item.type === 'video') {
-        firstVideo = item;
-        break;
-      }
+    if (!result || !('items' in result)) {
+      throw new Error('No search results found');
     }
 
-    if (!firstVideo) {
-      throw new Error('No video found.');
+    const { items } = result as { items: VideoDetailsResponse[] };
+
+    if (!items.length) {
+      throw new Error('No search results found');
     }
 
-    return this.getVideo(firstVideo.url, shouldSplitChapters);
+    const songs: SongMetadata[] = [];
+
+    for (const video of items) {
+      songs.push(...this.getMetadataFromVideo({ video, shouldSplitChapters }));
+    }
+
+    return songs;
   }
 
   async getVideo(url: string, shouldSplitChapters: boolean): Promise<SongMetadata[]> {
@@ -111,7 +117,7 @@ export default class {
       throw new Error('Video could not be found.');
     }
 
-    return this.getMetadataFromVideo({video, shouldSplitChapters});
+    return this.getMetadataFromVideo({ video, shouldSplitChapters });
   }
 
   async getPlaylist(listId: string, shouldSplitChapters: boolean): Promise<SongMetadata[]> {
@@ -121,8 +127,8 @@ export default class {
         id: listId,
       },
     };
-    const {items: playlists} = await this.cache.wrap(
-      async () => this.got('playlists', playlistParams).json() as Promise<{items: PlaylistResponse[]}>,
+    const { items: playlists } = await this.cache.wrap(
+      async () => this.got('playlists', playlistParams).json() as Promise<{ items: PlaylistResponse[] }>,
       playlistParams,
       {
         expiresIn: ONE_MINUTE_IN_SECONDS,
@@ -152,7 +158,7 @@ export default class {
       };
 
       // eslint-disable-next-line no-await-in-loop
-      const {items, nextPageToken} = await this.cache.wrap(
+      const { items, nextPageToken } = await this.cache.wrap(
         async () => this.got('playlistItems', playlistItemsParams).json() as Promise<PlaylistItemsResponse>,
         playlistItemsParams,
         {
@@ -173,14 +179,14 @@ export default class {
 
     await Promise.all(videoDetailsPromises);
 
-    const queuedPlaylist = {title: playlist.snippet.title, source: playlist.id};
+    const queuedPlaylist = { title: playlist.snippet.title, source: playlist.id };
 
     const songsToReturn: SongMetadata[] = [];
 
     for (const video of playlistVideos) {
       try {
         songsToReturn.push(...this.getMetadataFromVideo({
-          video: videoDetails.find((i: {id: string}) => i.id === video.contentDetails.videoId)!,
+          video: videoDetails.find((i: { id: string }) => i.id === video.contentDetails.videoId)!,
           queuedPlaylist,
           shouldSplitChapters,
         }));
@@ -226,7 +232,7 @@ export default class {
 
     const tracks: SongMetadata[] = [];
 
-    for (const [label, {offset, length}] of chapters) {
+    for (const [label, { offset, length }] of chapters) {
       tracks.push({
         ...base,
         offset,
@@ -239,10 +245,10 @@ export default class {
   }
 
   private parseChaptersFromDescription(description: string, videoDurationSeconds: number) {
-    const map = new Map<string, {offset: number; length: number}>();
+    const map = new Map<string, { offset: number; length: number }>();
     let foundFirstTimestamp = false;
 
-    const foundTimestamps: Array<{name: string; offset: number}> = [];
+    const foundTimestamps: Array<{ name: string; offset: number }> = [];
     for (const line of description.split('\n')) {
       const timestamps = Array.from(line.matchAll(/(?:\d+:)+\d+/g));
       if (timestamps?.length !== 1) {
@@ -261,10 +267,10 @@ export default class {
       const seconds = parseTime(timestamp);
       const chapterName = line.split(timestamp)[1].trim();
 
-      foundTimestamps.push({name: chapterName, offset: seconds});
+      foundTimestamps.push({ name: chapterName, offset: seconds });
     }
 
-    for (const [i, {name, offset}] of foundTimestamps.entries()) {
+    for (const [i, { name, offset }] of foundTimestamps.entries()) {
       map.set(name, {
         offset,
         length: i === foundTimestamps.length - 1
@@ -288,8 +294,8 @@ export default class {
       },
     };
 
-    const {items: videos} = await this.cache.wrap(
-      async () => this.got('videos', p).json() as Promise<{items: VideoDetailsResponse[]}>,
+    const { items: videos } = await this.cache.wrap(
+      async () => this.got('videos', p).json() as Promise<{ items: VideoDetailsResponse[] }>,
       p,
       {
         expiresIn: ONE_HOUR_IN_SECONDS,
