@@ -2,11 +2,16 @@
 
 import makeDir from 'make-dir';
 import path from 'path';
-import container from './inversify.config.js';
-import {TYPES} from './types.js';
 import Bot from './bot.js';
+import container from './inversify.config.js';
 import Config from './services/config.js';
 import FileCacheProvider from './services/file-cache.js';
+import { TYPES } from './types.js';
+
+
+console.log('Current working directory:', process.cwd());
+console.log('Current user:', require('os').userInfo().username);
+console.log('Node.js version:', process.version);
 
 const bot = container.get<Bot>(TYPES.Bot);
 
@@ -23,4 +28,5 @@ const startBot = async () => {
   await bot.register();
 };
 
-export {startBot};
+export { startBot };
+
