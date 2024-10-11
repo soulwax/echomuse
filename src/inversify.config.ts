@@ -1,3 +1,5 @@
+// File: src/inversify.config.ts
+
 import { Client, GatewayIntentBits } from 'discord.js';
 import { Container } from 'inversify';
 import 'reflect-metadata';

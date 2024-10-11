@@ -1,3 +1,5 @@
+// File: src/services/add-query-to-queue.ts
+
 /* eslint-disable complexity */
 import {ChatInputCommandInteraction, GuildMember} from 'discord.js';
 import {URL} from 'node:url';

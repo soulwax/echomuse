@@ -1,3 +1,5 @@
+// File: src/events/guild-create.ts
+
 import {Client, Guild} from 'discord.js';
 import container from '../inversify.config.js';
 import Command from '../commands/index.js';

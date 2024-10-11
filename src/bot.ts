@@ -1,3 +1,5 @@
+// File: src/bot.ts
+
 import { REST } from '@discordjs/rest';
 import { generateDependencyReport } from '@discordjs/voice';
 import { Routes } from 'discord-api-types/v10';
