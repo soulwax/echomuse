@@ -16,5 +16,5 @@ export const cleanUrl = (url: string) => {
     return u.toString()
   } catch (_: unknown) {
     return url
-  }ya
+  }
 }

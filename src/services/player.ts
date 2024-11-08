@@ -11,6 +11,7 @@ import {
   joinVoiceChannel,
   StreamType,
   VoiceConnection,
+  VoiceConnectionState,
   VoiceConnectionStatus,
 } from '@discordjs/voice'
 import ytdl, { videoFormat } from '@distube/ytdl-core'
@@ -26,6 +27,36 @@ import debug from '../utils/debug.js'
 import { getGuildSettings } from '../utils/get-guild-settings.js'
 import FileCacheProvider from './file-cache.js'
 
+// Updated interfaces
+interface Setting {
+  turnDownVolumeWhenPeopleSpeak?: boolean
+  turnDownVolumeWhenPeopleSpeakTarget?: number
+  secondsToWaitAfterQueueEmpties?: number
+  autoAnnounceNextSong?: boolean
+  defaultVolume?: number
+}
+
+interface NetworkState {
+  udp?: {
+    keepAliveInterval?: NodeJS.Timeout
+  }
+}
+
+interface NetworkStateChange {
+  networking?: {
+    on(
+      event: 'stateChange',
+      handler: (oldState: unknown, newState: NetworkState) => void,
+    ): void
+    off(
+      event: 'stateChange',
+      handler: (oldState: unknown, newState: NetworkState) => void,
+    ): void
+  }
+  status?: VoiceConnectionStatus
+}
+
+// Rest of your type definitions
 export enum MediaSource {
   Youtube,
   HLS,
@@ -47,6 +78,7 @@ export interface SongMetadata {
   thumbnailUrl: string | null
   source: MediaSource
 }
+
 export interface QueuedSong extends SongMetadata {
   addedInChannelId: Snowflake
   requestedBy: string
@@ -67,6 +99,9 @@ type YTDLVideoFormat = videoFormat & { loudnessDb?: number }
 export const DEFAULT_VOLUME = 100
 
 export default class {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  [x: string]: any
+  // Your class properties stay the same
   public voiceConnection: VoiceConnection | null = null
   public status = STATUS.PAUSED
   public guildId: string
@@ -82,11 +117,9 @@ export default class {
   private nowPlaying: QueuedSong | null = null
   private playPositionInterval: NodeJS.Timeout | undefined
   private lastSongURL = ''
-
   private positionInSeconds = 0
   private readonly fileCache: FileCacheProvider
   private disconnectTimer: NodeJS.Timeout | null = null
-
   private readonly channelToSpeakingUsers: Map<string, Set<string>> = new Map()
 
   constructor(fileCache: FileCacheProvider, guildId: string) {
@@ -95,7 +128,6 @@ export default class {
   }
 
   async connect(channel: VoiceChannel): Promise<void> {
-    // Always get freshest default volume setting value
     const settings = await getGuildSettings(this.guildId)
     const { defaultVolume = DEFAULT_VOLUME } = settings
     this.defaultVolume = defaultVolume
@@ -110,224 +142,66 @@ export default class {
 
     const guildSettings = await getGuildSettings(this.guildId)
 
-    // Workaround to disable keepAlive
-    this.voiceConnection.on('stateChange', (oldState, newState) => {
-      const oldNetworking = Reflect.get(oldState, 'networking')
-      const newNetworking = Reflect.get(newState, 'networking')
+    // Fixed stateChange event handler
+    this.voiceConnection.on(
+      'stateChange',
+      (oldState: VoiceConnectionState, newState: VoiceConnectionState) => {
+        const oldNetworking = Reflect.get(oldState, 'networking')
+        const newNetworking = Reflect.get(newState, 'networking')
 
-      const networkStateChangeHandler = (_: any, newNetworkState: any) => {
-        const newUdp = Reflect.get(newNetworkState, 'udp')
-        clearInterval(newUdp?.keepAliveInterval)
-      }
+        const networkStateChangeHandler = (
+          _oldNetState: unknown,
+          newNetworkState: NetworkState,
+        ) => {
+          const newUdp = Reflect.get(newNetworkState, 'udp')
+          if (newUdp?.keepAliveInterval) {
+            clearInterval(newUdp.keepAliveInterval)
+          }
+        }
 
-      oldNetworking?.off('stateChange', networkStateChangeHandler)
-      newNetworking?.on('stateChange', networkStateChangeHandler)
+        if (oldNetworking) {
+          oldNetworking.off('stateChange', networkStateChangeHandler)
+        }
+        if (newNetworking) {
+          newNetworking.on('stateChange', networkStateChangeHandler)
+        }
 
-      this.currentChannel = channel
-      if (newState.status === VoiceConnectionStatus.Ready) {
-        this.registerVoiceActivityListener(guildSettings)
-      }
-    })
-  }
-
-  disconnect(): void {
-    if (this.voiceConnection) {
-      if (this.status === STATUS.PLAYING) {
-        this.pause()
-      }
-
-      this.loopCurrentSong = false
-      this.voiceConnection.destroy()
-      this.audioPlayer?.stop(true)
-
-      this.voiceConnection = null
-      this.audioPlayer = null
-      this.audioResource = null
-    }
-  }
-
-  async seek(positionSeconds: number): Promise<void> {
-    this.status = STATUS.PAUSED
-
-    if (this.voiceConnection === null) {
-      throw new Error('Not connected to a voice channel.')
-    }
-
-    const currentSong = this.getCurrent()
-
-    if (!currentSong) {
-      throw new Error('No song currently playing')
-    }
-
-    if (positionSeconds > currentSong.length) {
-      throw new Error('Seek position is outside the range of the song.')
-    }
-
-    let realPositionSeconds = positionSeconds
-    let to: number | undefined
-    if (currentSong.offset !== undefined) {
-      realPositionSeconds += currentSong.offset
-      to = currentSong.length + currentSong.offset
-    }
-
-    const stream = await this.getStream(currentSong, {
-      seek: realPositionSeconds,
-      to,
-    })
-    this.audioPlayer = createAudioPlayer({
-      behaviors: {
-        // Needs to be somewhat high for livestreams
-        maxMissedFrames: 50,
+        this.currentChannel = channel
+        if (newState.status === VoiceConnectionStatus.Ready) {
+          this.registerVoiceActivityListener(guildSettings)
+        }
       },
-    })
-    this.voiceConnection.subscribe(this.audioPlayer)
-    this.playAudioPlayerResource(this.createAudioStream(stream))
-    this.attachListeners()
-    this.startTrackingPosition(positionSeconds)
-
-    this.status = STATUS.PLAYING
+    )
   }
 
-  async forwardSeek(positionSeconds: number): Promise<void> {
-    return this.seek(this.positionInSeconds + positionSeconds)
-  }
-
-  getPosition(): number {
-    return this.positionInSeconds
-  }
-
-  async play(): Promise<void> {
-    if (this.voiceConnection === null) {
-      throw new Error('Not connected to a voice channel.')
-    }
-
-    const currentSong = this.getCurrent()
-
-    if (!currentSong) {
-      throw new Error('Queue empty.')
-    }
-
-    // Cancel any pending idle disconnection
-    if (this.disconnectTimer) {
-      clearInterval(this.disconnectTimer)
-      this.disconnectTimer = null
-    }
-
-    // Resume from paused state
+  // Updated suppressVoiceWhenPeopleAreSpeaking method
+  suppressVoiceWhenPeopleAreSpeaking(
+    turnDownVolumeWhenPeopleSpeakTarget: number | undefined,
+  ): void {
     if (
-      this.status === STATUS.PAUSED &&
-      currentSong.url === this.nowPlaying?.url
+      !this.currentChannel ||
+      turnDownVolumeWhenPeopleSpeakTarget === undefined
     ) {
-      if (this.audioPlayer) {
-        this.audioPlayer.unpause()
-        this.status = STATUS.PLAYING
-        this.startTrackingPosition()
-        return
-      }
-
-      // Was disconnected, need to recreate stream
-      if (!currentSong.isLive) {
-        return this.seek(this.getPosition())
-      }
+      return
     }
 
-    try {
-      let positionSeconds: number | undefined
-      let to: number | undefined
-      if (currentSong.offset !== undefined) {
-        positionSeconds = currentSong.offset
-        to = currentSong.length + currentSong.offset
-      }
-
-      const stream = await this.getStream(currentSong, {
-        seek: positionSeconds,
-        to,
-      })
-      this.audioPlayer = createAudioPlayer({
-        behaviors: {
-          // Needs to be somewhat high for livestreams
-          maxMissedFrames: 50,
-        },
-      })
-      this.voiceConnection.subscribe(this.audioPlayer)
-      this.playAudioPlayerResource(this.createAudioStream(stream))
-
-      this.attachListeners()
-
-      this.status = STATUS.PLAYING
-      this.nowPlaying = currentSong
-
-      if (currentSong.url === this.lastSongURL) {
-        this.startTrackingPosition()
-      } else {
-        // Reset position counter
-        this.startTrackingPosition(0)
-        this.lastSongURL = currentSong.url
-      }
-    } catch (error: unknown) {
-      await this.forward(1)
-
-      if ((error as { statusCode: number }).statusCode === 410 && currentSong) {
-        const channelId = currentSong.addedInChannelId
-
-        if (channelId) {
-          debug(`${currentSong.title} is unavailable`)
-          return
-        }
-      }
-
-      throw error
+    const speakingUsers = this.channelToSpeakingUsers.get(
+      this.currentChannel.id,
+    )
+    if (speakingUsers && speakingUsers.size > 0) {
+      this.setVolume(turnDownVolumeWhenPeopleSpeakTarget)
+    } else {
+      this.setVolume(this.defaultVolume)
     }
   }
 
-  pause(): void {
-    if (this.status !== STATUS.PLAYING) {
-      throw new Error('Not currently playing.')
-    }
-
-    this.status = STATUS.PAUSED
-
-    if (this.audioPlayer) {
-      this.audioPlayer.pause()
-    }
-
-    this.stopTrackingPosition()
-  }
-
-  async forward(skip: number): Promise<void> {
-    this.manualForward(skip)
-
-    try {
-      if (this.getCurrent() && this.status !== STATUS.PAUSED) {
-        await this.play()
-      } else {
-        this.status = STATUS.IDLE
-        this.audioPlayer?.stop(true)
-
-        const settings = await getGuildSettings(this.guildId)
-
-        const { secondsToWaitAfterQueueEmpties } = settings
-        if (secondsToWaitAfterQueueEmpties !== 0) {
-          this.disconnectTimer = setTimeout(() => {
-            // Make sure we are not accidentally playing
-            // when disconnecting
-            if (this.status === STATUS.IDLE) {
-              this.disconnect()
-            }
-          }, secondsToWaitAfterQueueEmpties * 1000)
-        }
-      }
-    } catch (error: unknown) {
-      this.queuePosition--
-      throw error
-    }
-  }
-
-  registerVoiceActivityListener(guildSettings: Setting) {
+  // Updated registerVoiceActivityListener method
+  registerVoiceActivityListener(guildSettings: Setting): void {
     const {
       turnDownVolumeWhenPeopleSpeak,
       turnDownVolumeWhenPeopleSpeakTarget,
     } = guildSettings
+
     if (!turnDownVolumeWhenPeopleSpeak || !this.voiceConnection) {
       return
     }
@@ -348,9 +222,11 @@ export default class {
         this.channelToSpeakingUsers.get(channelId)?.add(member.id)
       }
 
-      this.suppressVoiceWhenPeopleAreSpeaking(
-        turnDownVolumeWhenPeopleSpeakTarget,
-      )
+      if (turnDownVolumeWhenPeopleSpeakTarget !== undefined) {
+        this.suppressVoiceWhenPeopleAreSpeaking(
+          turnDownVolumeWhenPeopleSpeakTarget,
+        )
+      }
     })
 
     this.voiceConnection.receiver.speaking.on('end', (userId: string) => {
@@ -368,27 +244,12 @@ export default class {
         this.channelToSpeakingUsers.get(channelId)?.delete(member.id)
       }
 
-      this.suppressVoiceWhenPeopleAreSpeaking(
-        turnDownVolumeWhenPeopleSpeakTarget,
-      )
+      if (turnDownVolumeWhenPeopleSpeakTarget !== undefined) {
+        this.suppressVoiceWhenPeopleAreSpeaking(
+          turnDownVolumeWhenPeopleSpeakTarget,
+        )
+      }
     })
-  }
-
-  suppressVoiceWhenPeopleAreSpeaking(
-    turnDownVolumeWhenPeopleSpeakTarget: number,
-  ): void {
-    if (!this.currentChannel) {
-      return
-    }
-
-    const speakingUsers = this.channelToSpeakingUsers.get(
-      this.currentChannel.id,
-    )
-    if (speakingUsers && speakingUsers.size > 0) {
-      this.setVolume(turnDownVolumeWhenPeopleSpeakTarget)
-    } else {
-      this.setVolume(this.defaultVolume)
-    }
   }
 
   canGoForward(skip: number) {

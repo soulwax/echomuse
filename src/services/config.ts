@@ -78,6 +78,7 @@ export default class Config {
       if (typeof value === 'number') {
         this[key as ConditionalKeys<typeof CONFIG_MAP, number>] = value
       } else if (typeof value === 'string') {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         ;(this as any)[key] = value.trim()
       } else if (typeof value === 'boolean') {
         this[key as ConditionalKeys<typeof CONFIG_MAP, boolean>] = value
