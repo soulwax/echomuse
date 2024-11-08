@@ -6,7 +6,7 @@ import {prettyTime} from './time.js';
 import {truncate} from './string.js';
 
 const getMaxSongTitleLength = (title: string) => {
-  // eslint-disable-next-line no-control-regex
+   
   const nonASCII = /[^\x00-\x7F]+/;
   return nonASCII.test(title) ? 28 : 48;
 };
@@ -45,7 +45,7 @@ const getPlayerUI = (player: Player) => {
   const progressBar = getProgressBar(10, position / song.length);
   const elapsedTime = song.isLive ? 'live' : `${prettyTime(position)}/${prettyTime(song.length)}`;
   const loop = player.loopCurrentSong ? '🔂' : player.loopCurrentQueue ? '🔁' : '';
-  const vol: string = typeof player.getVolume() === 'number' ? `${player.getVolume()!}%` : '';
+  const vol: string = typeof player.getVolume() === 'number' ? `${player.getVolume()}%` : '';
   return `${button} ${progressBar} \`[${elapsedTime}]\`🔉 ${vol} ${loop}`;
 };
 

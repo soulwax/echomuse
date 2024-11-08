@@ -1,9 +1,11 @@
 {
   "compilerOptions": {
-    "lib": ["esnext"],
+    "lib": [
+      "esnext"
+    ],
     "target": "ES2022",
-    "module": "ES2022",
-    "moduleResolution": "node",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
     "strict": true,
     "experimentalDecorators": true,
     "forceConsistentCasingInFileNames": true,
@@ -12,9 +14,17 @@
     "resolveJsonModule": true,
     "outDir": "dist",
     "skipLibCheck": true,
-    "typeRoots": ["./node_modules/@types"]
-
+    "typeRoots": [
+      "./node_modules/@types"
+    ]
   },
-  "include": ["src"],
-  "exclude": ["node_modules"]
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "eslint.config.mjs" // Updated extension
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
 }

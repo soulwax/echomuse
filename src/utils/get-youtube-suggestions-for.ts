@@ -1,6 +1,6 @@
 // File: src/utils/get-youtube-suggestions-for.ts
 
-import got from 'got';
+import got from 'got'
 
 const getYouTubeSuggestionsFor = async (query: string): Promise<string[]> => {
   const [_, suggestions] = await got('https://suggestqueries.google.com/complete/search?client=firefox&ds=yt&q=', {
@@ -9,9 +9,9 @@ const getYouTubeSuggestionsFor = async (query: string): Promise<string[]> => {
       ds: 'yt',
       q: query,
     },
-  }).json<[string, string[]]>();
+  }).json<[string, string[]]>()
 
-  return suggestions;
-};
+  return suggestions
+}
 
-export default getYouTubeSuggestionsFor;
+export default getYouTubeSuggestionsFor

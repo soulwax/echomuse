@@ -59,7 +59,7 @@ export default class {
     }
 
     // Register event handlers
-    // eslint-disable-next-line complexity
+     
     this.client.on('interactionCreate', async interaction => {
       try {
         if (interaction.isCommand()) {

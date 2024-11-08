@@ -71,7 +71,7 @@ export default class implements Command {
 
     try {
       // Don't return suggestions for URLs
-      // eslint-disable-next-line no-new
+       
       new URL(query);
       await interaction.respond([]);
       return;
