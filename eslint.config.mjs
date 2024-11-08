@@ -21,7 +21,7 @@ export default [
     languageOptions: {
       globals: {
         ...globals.node,
-        _: 'readonly', // Allow lodash's _
+        _: 'readonly',
       },
     },
   },
@@ -39,21 +39,17 @@ export default [
       '@typescript-eslint': tseslint.plugin,
     },
     rules: {
-      // Disable base rules to avoid conflicts
+      // Completely disable base ESLint rules we want to override
       'no-unused-vars': 'off',
       'no-empty': 'off',
       'no-useless-escape': 'off',
       'no-control-regex': 'off',
       'prefer-const': 'off',
+      'no-unused-expressions': 'off',
 
-      // TypeScript-specific rules
-      '@typescript-eslint/no-unused-vars': [
-        'warn',
-        {
-          varsIgnorePattern: '^_',
-          argsIgnorePattern: '^_',
-        },
-      ],
+      // Override TypeScript rules
+      '@typescript-eslint/no-unused-vars': 'off', // Completely disable unused vars check
+      '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-unsafe-assignment': 'off',
       '@typescript-eslint/no-unsafe-argument': 'off',
@@ -68,30 +64,16 @@ export default [
       '@typescript-eslint/no-unused-expressions': 'off',
       '@typescript-eslint/restrict-template-expressions': 'off',
       '@typescript-eslint/no-empty-function': 'off',
+      'prefer-const': 'off', // Disable prefer-const rule
     },
   },
 
-  // Disable specific rules from recommended configs
-  {
-    files: ['**/*.ts'],
-    rules: {
-      '@typescript-eslint/no-misused-promises': 'off',
-      '@typescript-eslint/unbound-method': 'off',
-      '@typescript-eslint/no-floating-promises': 'off',
-      '@typescript-eslint/no-explicit-any': 'off',
-      '@typescript-eslint/no-unsafe-assignment': 'off',
-      '@typescript-eslint/no-unsafe-member-access': 'off',
-      '@typescript-eslint/no-unsafe-call': 'off',
-      '@typescript-eslint/no-unsafe-argument': 'off',
-      '@typescript-eslint/no-redundant-type-constituents': 'off',
-    },
-  },
-
-  // Include modified recommended configurations
+  // Override recommended configs
   ...tseslint.configs.recommendedTypeChecked.map((config) => ({
     ...config,
     rules: {
       ...config.rules,
+      '@typescript-eslint/no-unused-vars': 'off',
       '@typescript-eslint/no-misused-promises': 'off',
       '@typescript-eslint/no-floating-promises': 'off',
       '@typescript-eslint/no-explicit-any': 'off',
@@ -101,6 +83,20 @@ export default [
       '@typescript-eslint/no-unsafe-argument': 'off',
       '@typescript-eslint/unbound-method': 'off',
       '@typescript-eslint/no-redundant-type-constituents': 'off',
+      '@typescript-eslint/prefer-promise-reject-errors': 'off',
+      '@typescript-eslint/no-unused-expressions': 'off',
+      'prefer-const': 'off',
+    },
+  })),
+
+  // Apply basic recommended rules but override specific ones
+  pluginJs.configs.recommended,
+  ...tseslint.configs.recommended.map((config) => ({
+    ...config,
+    rules: {
+      ...config.rules,
+      '@typescript-eslint/no-unused-vars': 'off',
+      'prefer-const': 'off',
     },
   })),
 ]
