@@ -1,73 +1,92 @@
 // File: src/services/youtube-api.ts
 
-import ytsr from '@distube/ytsr';
-import getYouTubeID from 'get-youtube-id';
-import got, { Got } from 'got';
-import { inject, injectable } from 'inversify';
-import { parse, toSeconds } from 'iso8601-duration';
-import PQueue from 'p-queue';
-import { TYPES } from '../types.js';
-import { ONE_HOUR_IN_SECONDS, ONE_MINUTE_IN_SECONDS } from '../utils/constants.js';
-import { parseTime } from '../utils/time.js';
-import Config from './config.js';
-import KeyValueCacheProvider from './key-value-cache.js';
-import { MediaSource, QueuedPlaylist, SongMetadata } from './player.js';
-
-
-
+import ytsr from '@distube/ytsr'
+import getYouTubeID from 'get-youtube-id'
+import got, { Got } from 'got'
+import { inject, injectable } from 'inversify'
+import { parse, toSeconds } from 'iso8601-duration'
+import PQueue from 'p-queue'
+import { TYPES } from '../types.js'
+import {
+  ONE_HOUR_IN_SECONDS,
+  ONE_MINUTE_IN_SECONDS,
+} from '../utils/constants.js'
+import { parseTime } from '../utils/time.js'
+import Config from './config.js'
+import KeyValueCacheProvider from './key-value-cache.js'
+import { MediaSource, QueuedPlaylist, SongMetadata } from './player.js'
 
 interface VideoDetailsResponse {
-  id: string;
+  id: string
   contentDetails: {
-    videoId: string;
-    duration: string;
-  };
+    videoId: string
+    duration: string
+  }
   snippet: {
-    title: string;
-    channelTitle: string;
-    liveBroadcastContent: string;
-    description: string;
+    title: string
+    channelTitle: string
+    liveBroadcastContent: string
+    description: string
     thumbnails: {
       medium: {
-        url: string;
-      };
-    };
-  };
+        url: string
+      }
+    }
+  }
 }
 
 interface PlaylistResponse {
-  id: string;
+  id: string
   contentDetails: {
-    itemCount: number;
-  };
+    itemCount: number
+  }
   snippet: {
-    title: string;
-  };
+    title: string
+  }
 }
 
 interface PlaylistItemsResponse {
-  items: PlaylistItem[];
-  nextPageToken?: string;
+  items: PlaylistItem[]
+  nextPageToken?: string
 }
 
 interface PlaylistItem {
-  id: string;
+  id: string
   contentDetails: {
-    videoId: string;
-  };
+    videoId: string
+  }
+}
+
+interface VideoResult {
+  items: Array<{
+    id: string
+    title: string
+    duration: string
+    channel: {
+      name: string
+    }
+    isLive: boolean
+    thumbnail: {
+      url: string
+    }
+    description: string
+  }>
 }
 
 @injectable()
 export default class {
-  private readonly youtubeKey: string;
-  private readonly cache: KeyValueCacheProvider;
-  private readonly ytsrQueue: PQueue;
-  private readonly got: Got;
+  private readonly youtubeKey: string
+  private readonly cache: KeyValueCacheProvider
+  private readonly ytsrQueue: PQueue
+  private readonly got: Got
 
-  constructor(@inject(TYPES.Config) config: Config, @inject(TYPES.KeyValueCache) cache: KeyValueCacheProvider) {
-    this.youtubeKey = config.YOUTUBE_API_KEY;
-    this.cache = cache;
-    this.ytsrQueue = new PQueue({ concurrency: 4 });
+  constructor(
+    @inject(TYPES.Config) config: Config,
+    @inject(TYPES.KeyValueCache) cache: KeyValueCacheProvider,
+  ) {
+    this.youtubeKey = config.YOUTUBE_API_KEY
+    this.cache = cache
+    this.ytsrQueue = new PQueue({ concurrency: 4 })
 
     this.got = got.extend({
       prefixUrl: 'https://www.googleapis.com/youtube/v3/',
@@ -75,128 +94,74 @@ export default class {
         key: this.youtubeKey,
         responseType: 'json',
       },
-    });
+    })
   }
 
-  async search(query: string, shouldSplitChapters: boolean): Promise<SongMetadata[]> {
-    const result = await this.ytsrQueue.add(async () => this.cache.wrap(
-      ytsr,
-      query,
-      {
-        limit: 10,
-      },
-      {
-        expiresIn: ONE_HOUR_IN_SECONDS,
-      },
-    )) as VideoDetailsResponse | void; // Assuming VideoDetailsResponse is the correct type
+  async search(
+    query: string,
+    shouldSplitChapters: boolean,
+  ): Promise<SongMetadata[]> {
+    const result = await this.ytsrQueue.add(async () => {
+      const searchResult = (await this.cache.wrap(
+        async () => ytsr(query, { limit: 10 }),
+        { searchParams: { query } },
+        { expiresIn: ONE_HOUR_IN_SECONDS, key: 'youtube-search' },
+        async () => ({ items: [] }),
+        { expiresIn: ONE_HOUR_IN_SECONDS, key: 'youtube-search' },
+      )) as unknown as VideoResult
 
-    if (!result || !('items' in result)) {
-      throw new Error('No search results found');
+      return {
+        items: searchResult.items.map((item) => ({
+          id: item.id,
+          contentDetails: {
+            videoId: item.id,
+            duration: item.duration,
+          },
+          snippet: {
+            title: item.title,
+            channelTitle: item.channel.name,
+            liveBroadcastContent: item.isLive ? 'live' : 'none',
+            description: item.description,
+            thumbnails: {
+              medium: {
+                url: item.thumbnail.url,
+              },
+            },
+          },
+        })),
+      }
+    })
+
+    if (!result?.items?.length) {
+      throw new Error('No search results found')
     }
 
-    const { items } = result as { items: VideoDetailsResponse[] };
-
-    if (!items.length) {
-      throw new Error('No search results found');
-    }
-
-    const songs: SongMetadata[] = [];
-
-    for (const video of items) {
-      songs.push(...this.getMetadataFromVideo({ video, shouldSplitChapters }));
-    }
-
-    return songs;
-  }
-
-  async getVideo(url: string, shouldSplitChapters: boolean): Promise<SongMetadata[]> {
-    const result = await this.getVideosByID([String(getYouTubeID(url))]);
-    const video = result.at(0);
-
-    if (!video) {
-      throw new Error('Video could not be found.');
-    }
-
-    return this.getMetadataFromVideo({ video, shouldSplitChapters });
-  }
-
-  async getPlaylist(listId: string, shouldSplitChapters: boolean): Promise<SongMetadata[]> {
-    const playlistParams = {
-      searchParams: {
-        part: 'id, snippet, contentDetails',
-        id: listId,
-      },
-    };
-    const { items: playlists } = await this.cache.wrap(
-      async () => this.got('playlists', playlistParams).json() as Promise<{ items: PlaylistResponse[] }>,
-      playlistParams,
-      {
-        expiresIn: ONE_MINUTE_IN_SECONDS,
-      },
-    );
-
-    const playlist = playlists.at(0)!;
-
-    if (!playlist) {
-      throw new Error('Playlist could not be found.');
-    }
-
-    const playlistVideos: PlaylistItem[] = [];
-    const videoDetailsPromises: Array<Promise<void>> = [];
-    const videoDetails: VideoDetailsResponse[] = [];
-
-    let nextToken: string | undefined;
-
-    while (playlistVideos.length < playlist.contentDetails.itemCount) {
-      const playlistItemsParams = {
-        searchParams: {
-          part: 'id, contentDetails',
-          playlistId: listId,
-          maxResults: '50',
-          pageToken: nextToken,
-        },
-      };
-
-       
-      const { items, nextPageToken } = await this.cache.wrap(
-        async () => this.got('playlistItems', playlistItemsParams).json() as Promise<PlaylistItemsResponse>,
-        playlistItemsParams,
-        {
-          expiresIn: ONE_MINUTE_IN_SECONDS,
-        },
-      );
-
-      nextToken = nextPageToken;
-      playlistVideos.push(...items);
-
-      // Start fetching extra details about videos
-      // PlaylistItem misses some details, eg. if the video is a livestream
-      videoDetailsPromises.push((async () => {
-        const videoDetailItems = await this.getVideosByID(items.map(item => item.contentDetails.videoId));
-        videoDetails.push(...videoDetailItems);
-      })());
-    }
-
-    await Promise.all(videoDetailsPromises);
-
-    const queuedPlaylist = { title: playlist.snippet.title, source: playlist.id };
-
-    const songsToReturn: SongMetadata[] = [];
-
-    for (const video of playlistVideos) {
-      try {
-        songsToReturn.push(...this.getMetadataFromVideo({
-          video: videoDetails.find((i: { id: string }) => i.id === video.contentDetails.videoId)!,
-          queuedPlaylist,
-          shouldSplitChapters,
-        }));
-      } catch (_: unknown) {
-        // Private and deleted videos are sometimes in playlists, duration of these
-        // is not returned and they should not be added to the queue.
+    interface SearchResultItem {
+      id: string
+      contentDetails: {
+        videoId: string
+        duration: string
+      }
+      snippet: {
+        title: string
+        channelTitle: string
+        liveBroadcastContent: string
+        description: string
+        thumbnails: {
+          medium: {
+            url: string
+          }
+        }
       }
     }
 
-    return songsToReturn;
+    return result.items.reduce<SongMetadata[]>(
+      (songs: SongMetadata[], video: SearchResultItem): SongMetadata[] => {
+        songs.push(...this.getMetadataFromVideo({ video, shouldSplitChapters }))
+        return songs
+      },
+      [],
+    )
   }
 
   private getMetadataFromVideo({
@@ -204,9 +169,9 @@ export default class {
     queuedPlaylist,
     shouldSplitChapters,
   }: {
-    video: VideoDetailsResponse; // | YoutubePlaylistItem;
-    queuedPlaylist?: QueuedPlaylist;
-    shouldSplitChapters?: boolean;
+    video: VideoDetailsResponse // | YoutubePlaylistItem;
+    queuedPlaylist?: QueuedPlaylist
+    shouldSplitChapters?: boolean
   }): SongMetadata[] {
     const base: SongMetadata = {
       source: MediaSource.Youtube,
@@ -218,19 +183,22 @@ export default class {
       playlist: queuedPlaylist ?? null,
       isLive: video.snippet.liveBroadcastContent === 'live',
       thumbnailUrl: video.snippet.thumbnails.medium.url,
-    };
+    }
 
     if (!shouldSplitChapters) {
-      return [base];
+      return [base]
     }
 
-    const chapters = this.parseChaptersFromDescription(video.snippet.description, base.length);
+    const chapters = this.parseChaptersFromDescription(
+      video.snippet.description,
+      base.length,
+    )
 
     if (!chapters) {
-      return [base];
+      return [base]
     }
 
-    const tracks: SongMetadata[] = [];
+    const tracks: SongMetadata[] = []
 
     for (const [label, { offset, length }] of chapters) {
       tracks.push({
@@ -238,69 +206,78 @@ export default class {
         offset,
         length,
         title: `${label} (${base.title})`,
-      });
+      })
     }
 
-    return tracks;
+    return tracks
   }
 
-  private parseChaptersFromDescription(description: string, videoDurationSeconds: number) {
-    const map = new Map<string, { offset: number; length: number }>();
-    let foundFirstTimestamp = false;
+  private parseChaptersFromDescription(
+    description: string,
+    videoDurationSeconds: number,
+  ) {
+    const map = new Map<string, { offset: number; length: number }>()
+    let foundFirstTimestamp = false
 
-    const foundTimestamps: Array<{ name: string; offset: number }> = [];
+    const foundTimestamps: Array<{ name: string; offset: number }> = []
     for (const line of description.split('\n')) {
-      const timestamps = Array.from(line.matchAll(/(?:\d+:)+\d+/g));
+      const timestamps = Array.from(line.matchAll(/(?:\d+:)+\d+/g))
       if (timestamps?.length !== 1) {
-        continue;
+        continue
       }
 
       if (!foundFirstTimestamp) {
         if (/0{1,2}:00/.test(timestamps[0][0])) {
-          foundFirstTimestamp = true;
+          foundFirstTimestamp = true
         } else {
-          continue;
+          continue
         }
       }
 
-      const timestamp = timestamps[0][0];
-      const seconds = parseTime(timestamp);
-      const chapterName = line.split(timestamp)[1].trim();
+      const timestamp = timestamps[0][0]
+      const seconds = parseTime(timestamp)
+      const chapterName = line.split(timestamp)[1].trim()
 
-      foundTimestamps.push({ name: chapterName, offset: seconds });
+      foundTimestamps.push({ name: chapterName, offset: seconds })
     }
 
     for (const [i, { name, offset }] of foundTimestamps.entries()) {
       map.set(name, {
         offset,
-        length: i === foundTimestamps.length - 1
-          ? videoDurationSeconds - offset
-          : foundTimestamps[i + 1].offset - offset,
-      });
+        length:
+          i === foundTimestamps.length - 1
+            ? videoDurationSeconds - offset
+            : foundTimestamps[i + 1].offset - offset,
+      })
     }
 
     if (!map.size) {
-      return null;
+      return null
     }
 
-    return map;
+    return map
   }
 
-  private async getVideosByID(videoIDs: string[]): Promise<VideoDetailsResponse[]> {
+  private async getVideosByID(
+    videoIDs: string[],
+  ): Promise<VideoDetailsResponse[]> {
     const p = {
       searchParams: {
         part: 'id, snippet, contentDetails',
         id: videoIDs.join(','),
       },
-    };
+    }
 
     const { items: videos } = await this.cache.wrap(
-      async () => this.got('videos', p).json() as Promise<{ items: VideoDetailsResponse[] }>,
-      p,
+      async () =>
+        this.got('videos', p).json() as Promise<{
+          items: VideoDetailsResponse[]
+        }>,
       {
+        ...p,
         expiresIn: ONE_HOUR_IN_SECONDS,
       },
-    );
-    return videos;
+    )
+    return videos
   }
 }
