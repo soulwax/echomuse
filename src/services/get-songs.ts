@@ -1,6 +1,3 @@
-// File: src/services/get-songs.ts
-
-import 'reflect-metadata'
 import { inject, injectable, optional } from 'inversify'
 import * as spotifyURI from 'spotify-uri'
 import { SongMetadata, QueuedPlaylist, MediaSource } from './player.js'
@@ -99,7 +96,7 @@ export default class {
           throw new Error("that doesn't exist")
         }
       }
-    } catch (err: unknown) {
+    } catch (err: any) {
       if (err instanceof Error && err.message === 'Spotify is not enabled!') {
         throw err
       }
@@ -207,7 +204,7 @@ export default class {
   private async spotifyToYouTube(
     tracks: SpotifyTrack[],
     shouldSplitChapters: boolean,
-    playlist?: QueuedPlaylist,
+    playlist?: QueuedPlaylist | undefined,
   ): Promise<[SongMetadata[], number, number]> {
     const promisedResults = tracks.map(async (track) =>
       this.youtubeAPI.search(
