@@ -1,0 +1,41 @@
+yarn outdated v1.22.22
+info Color legend : 
+ "<red>"    : Major Update backward-incompatible updates 
+ "<yellow>" : Minor Update backward-compatible features 
+ "<green>"  : Patch Update backward-compatible bug fixes
+Package                      Current Wanted  Latest   Package Type           URL                                                                            
+@discordjs/builders          1.1.0   1.1.0   1.9.0    dependencies           https://discord.js.org                                                         
+@discordjs/opus              0.8.0   0.8.0   0.9.0    dependencies           https://github.com/discordjs/opus#readme                                       
+@discordjs/rest              1.0.1   1.0.1   2.4.0    dependencies           https://discord.js.org                                                         
+@discordjs/voice             0.17.0  0.17.0  0.18.0   dependencies           https://discord.js.org                                                         
+@prisma/client               5.22.0  5.22.0  6.0.1    dependencies           https://www.prisma.io                                                          
+@release-it/keep-a-changelog 2.5.0   2.5.0   5.0.0    devDependencies        https://github.com/release-it/keep-a-changelog#readme                          
+@types/fs-capacitor          2.0.0   2.0.0   8.0.2    devDependencies        https://github.com/DefinitelyTyped/DefinitelyTyped.git                         
+@types/ms                    0.7.31  0.7.31  0.7.34   devDependencies        https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/ms        
+@types/node-emoji            1.8.2   1.8.2   2.1.0    devDependencies        https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/node-emoji
+@types/parse-duration        0.1.0   0.1.0   0.3.0    devDependencies                                                                                       
+@types/ws                    8.5.4   8.5.4   8.5.13   resolutionDependencies https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/ws        
+@types/ws                    8.5.4   8.5.4   8.5.13   devDependencies        https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/ws        
+delay                        5.0.0   5.0.0   6.0.0    dependencies           https://github.com/sindresorhus/delay#readme                                   
+discord-api-types            0.32.1  0.32.1  0.37.110 dependencies           https://discord-api-types.dev                                                  
+eslint                       8.57.1  8.57.1  9.16.0   devDependencies        https://eslint.org                                                             
+execa                        6.1.0   6.1.0   9.5.1    dependencies           https://github.com/sindresorhus/execa#readme                                   
+fs-capacitor                 7.0.1   7.0.1   8.0.0    dependencies           https://github.com/mike-marcacci/fs-capacitor#readme                           
+got                          12.6.1  12.6.1  14.4.5   dependencies           https://github.com/sindresorhus/got#readme                                     
+hasha                        5.2.2   5.2.2   6.0.0    dependencies           https://github.com/sindresorhus/hasha#readme                                   
+husky                        4.3.8   4.3.8   9.1.7    devDependencies        https://github.com/typicode/husky#readme                                       
+inversify                    6.0.1   6.0.1   6.1.6    dependencies           http://inversify.io                                                            
+make-dir                     3.1.0   3.1.0   5.0.0    dependencies           https://github.com/sindresorhus/make-dir#readme                                
+node-emoji                   1.11.0  1.11.0  2.2.0    dependencies           https://github.com/omnidan/node-emoji#readme                                   
+p-event                      5.0.1   5.0.1   6.0.1    dependencies           https://github.com/sindresorhus/p-event#readme                                 
+p-queue                      7.1.0   7.1.0   8.0.1    dependencies           https://github.com/sindresorhus/p-queue#readme                                 
+p-retry                      6.2.0   6.2.0   6.2.1    dependencies           https://github.com/sindresorhus/p-retry#readme                                 
+parse-duration               1.0.2   1.0.2   1.1.1    dependencies           https://github.com/jkroso/parse-duration#readme                                
+prisma                       5.22.0  5.22.0  6.0.1    devDependencies        https://www.prisma.io                                                          
+read-pkg                     7.1.0   7.1.0   9.0.1    dependencies           https://github.com/sindresorhus/read-pkg#readme                                
+release-it                   14.14.3 14.14.3 17.10.0  devDependencies        https://github.com/release-it/release-it#readme                                
+spotify-uri                  3.0.4   3.0.4   4.1.0    dependencies           https://github.com/TooTallNate/spotify-uri#readme                              
+sync-fetch                   0.3.1   0.3.1   0.6.0-2  dependencies           https://github.com/larsgw/sync-fetch#readme                                    
+tsx                          3.8.2   3.8.2   4.19.2   dependencies           https://tsx.is                                                                 
+type-fest                    2.19.0  2.19.0  4.30.0   devDependencies        https://github.com/sindresorhus/type-fest#readme                               
+Done in 3.22s.
